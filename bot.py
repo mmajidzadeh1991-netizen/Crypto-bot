@@ -111,7 +111,17 @@ def analyze_any_coin(coin_input):
     change_24h = cg_data["change_24h"]
     rec = tv_data["recommendation"]
     
-    rec_fa = "خرید قوی 🟢" if "STRONG_BUY" in rec else ("فروش قوی 🔴" if "STRONG_SELL" in rec else ("خرید 🟢" in rec else ("فروش 🔴" in rec else "خنثی ⚪")))
+    # اصلاح ساختار برای جلوگیری از خطای سینتکسی
+    if "STRONG_BUY" in rec:
+        rec_fa = "خرید قوی 🟢"
+    elif "STRONG_SELL" in rec:
+        rec_fa = "فروش قوی 🔴"
+    elif "BUY" in rec:
+        rec_fa = "خرید 🟢"
+    elif "SELL" in rec:
+        rec_fa = "فروش 🔴"
+    else:
+        rec_fa = "خنثی ⚪"
     
     analysis_text = (
         f"📊 **گزارش تحلیل پیشرفته (TradingView & CoinGecko): `{clean}`**\n\n"
@@ -222,6 +232,9 @@ def analyze_market_auto(coin_info):
 
 def handle_callback_queries(last_update_id):
     global ACTIVE_TRADE, USER_STATES
+    if last_update_id is None:
+        last_update_id = 0
+        
     url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={last_update_id}&timeout=3"
     try:
         response = requests.get(url, timeout=5)
@@ -229,42 +242,48 @@ def handle_callback_queries(last_update_id):
         
         if data.get("ok") and data.get("result"):
             for update in data["result"]:
-                last_update_id = update["update_id"] + 1
+                update_id = update.get("update_id")
+                if update_id is not None:
+                    last_update_id = update_id + 1
                 
                 if "callback_query" in update:
                     callback = update["callback_query"]
-                    callback_id = callback["id"]
-                    data_action = callback["data"]
-                    sender_chat_id = callback["message"]["chat"]["id"]
+                    callback_id = callback.get("id")
+                    data_action = callback.get("data")
+                    message_obj = callback.get("message")
                     
-                    requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", json={"callback_query_id": callback_id})
-                    
-                    if data_action == "CLOSE_TRADE":
-                        ACTIVE_TRADE = None
-                        USER_STATES.pop(sender_chat_id, None)
-                        send_telegram_message("❌ پوزیشن فعال بسته شد.", sender_chat_id)
-                    elif data_action == "STATUS":
-                        if ACTIVE_TRADE:
-                            send_telegram_message(f"📊 **پوزیشن فعال:**\nنوع: `{ACTIVE_TRADE['type']}`\nارز: `{ACTIVE_TRADE['symbol']}`\nورود: `{ACTIVE_TRADE['entry']}`", sender_chat_id)
-                        else:
-                            send_telegram_message("⚪ هیچ پوزیشن فعالی باز نیست.", sender_chat_id)
-                    elif data_action == "ANALYZE_CUSTOM":
-                        USER_STATES[sender_chat_id] = "WAITING_FOR_COIN"
-                        send_telegram_message("🔍 لطفاً **نام یا نماد ارز موردنظر** خود را بفرستید (مثلاً: `BTC` یا `SOL`):", sender_chat_id)
-                    elif data_action == "SCAN_NOW":
-                        send_telegram_message("🔍 در حال اسکن بازار با تریدینگ‌ویو و کوین‌گکو...", sender_chat_id)
-                        for coin in TOP_COINS_TV:
-                            td, msg, kb = analyze_market_auto(coin)
-                            if td:
-                                ACTIVE_TRADE = td
-                                send_telegram_message(msg, sender_chat_id, kb)
-                                break
-                        else:
-                            send_telegram_message("⚪ اسکن انجام شد. در حال حاضر سیگنال مناسبی در بازار پیدا نشد.", sender_chat_id)
+                    if message_obj and "chat" in message_obj:
+                        sender_chat_id = message_obj["chat"]["id"]
+                        if callback_id:
+                            requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", json={"callback_query_id": callback_id})
+                        
+                        if data_action == "CLOSE_TRADE":
+                            ACTIVE_TRADE = None
+                            USER_STATES.pop(sender_chat_id, None)
+                            send_telegram_message("❌ پوزیشن فعال بسته شد.", sender_chat_id)
+                        elif data_action == "STATUS":
+                            if ACTIVE_TRADE:
+                                send_telegram_message(f"📊 **پوزیشن فعال:**\nنوع: `{ACTIVE_TRADE['type']}`\nارز: `{ACTIVE_TRADE['symbol']}`\nورود: `{ACTIVE_TRADE['entry']}`", sender_chat_id)
+                            else:
+                                send_telegram_message("⚪ هیچ پوزیشن فعالی باز نیست.", sender_chat_id)
+                        elif data_action == "ANALYZE_CUSTOM":
+                            USER_STATES[sender_chat_id] = "WAITING_FOR_COIN"
+                            send_telegram_message("🔍 لطفاً **نام یا نماد ارز موردنظر** خود را بفرستید (مثلاً: `BTC` یا `SOL`):", sender_chat_id)
+                        elif data_action == "SCAN_NOW":
+                            send_telegram_message("🔍 در حال اسکن بازار با تریدینگ‌ویو و کوین‌گکو...", sender_chat_id)
+                            for coin in TOP_COINS_TV:
+                                td, msg, kb = analyze_market_auto(coin)
+                                if td:
+                                    ACTIVE_TRADE = td
+                                    send_telegram_message(msg, sender_chat_id, kb)
+                                    break
+                            else:
+                                send_telegram_message("⚪ اسکن انجام شد. در حال حاضر سیگنال مناسبی در بازار پیدا نشد.", sender_chat_id)
 
                 elif "message" in update and "text" in update["message"]:
-                    raw_text = update["message"]["text"]
-                    sender_chat_id = update["message"]["chat"]["id"]
+                    msg_data = update["message"]
+                    raw_text = msg_data["text"]
+                    sender_chat_id = msg_data["chat"]["id"]
                     text_clean = raw_text.strip()
                     text_upper = text_clean.upper()
                     
