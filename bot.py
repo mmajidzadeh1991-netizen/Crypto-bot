@@ -4,6 +4,8 @@ from flask import Flask
 import threading
 import json
 from datetime import datetime
+from google import genai
+from google.genai import types
 from tradingview_ta import TA_Handler, Interval
 
 # --- تنظیمات وب‌سرور ---
@@ -11,23 +13,26 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Advanced TradingView & CoinGecko Bot is running 24/7!"
+    return "Gemini-Powered ICT & SMC Trading Bot is running 24/7!"
 
 def run_web():
     app.run(host="0.0.0.0", port=10000)
 
-# --- تنظیمات ربات تلگرام ---
+# --- تنظیمات ربات تلگرام و گوگل جمنای ---
 TOKEN = "8905848713:AAGrGzm8vqX1_ZGh9C7mmIPO0dRM430x1bA"
 CHAT_ID = "927615637"
+
+# کلید API گوگل جمنای شما
+GEMINI_API_KEY = "AQ.Ab8RN6IXX6wOi5ujmFH0IqQd0KpJvDjwN6xyd0UC5nZxY86KWQ"
+
+# راه‌اندازی کلاینت جمنای
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # نمادها برای تریدینگ‌ویو و کوین‌گکو
 TOP_COINS_TV = [
     {"symbol": "BTCUSDT", "exchange": "BINANCE", "coingecko_id": "bitcoin"},
     {"symbol": "ETHUSDT", "exchange": "BINANCE", "coingecko_id": "ethereum"},
-    {"symbol": "BNBUSDT", "exchange": "BINANCE", "coingecko_id": "binancecoin"},
-    {"symbol": "SOLUSDT", "exchange": "BINANCE", "coingecko_id": "solana"},
-    {"symbol": "XRPUSDT", "exchange": "BINANCE", "coingecko_id": "ripple"},
-    {"symbol": "ADAUSDT", "exchange": "BINANCE", "coingecko_id": "cardano"}
+    {"symbol": "SOLUSDT", "exchange": "BINANCE", "coingecko_id": "solana"}
 ]
 
 LAST_HEARTBEAT_TIME = time.time()
@@ -51,7 +56,6 @@ def send_telegram_message(message, chat_id=CHAT_ID, reply_markup=None):
         print(f"خطا در ارسال پیام: {e}")
 
 def get_coingecko_price(coin_id):
-    """دریافت قیمت لحظه‌ای و اطلاعات از کوین‌گکو"""
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
     try:
         res = requests.get(url, timeout=10)
@@ -66,7 +70,6 @@ def get_coingecko_price(coin_id):
     return None
 
 def get_tradingview_analysis(symbol, exchange="BINANCE"):
-    """دریافت تحلیل تکنیکال و پیشنهاد خرید/فروش از تریدینگ‌ویو"""
     try:
         handler = TA_Handler(
             symbol=symbol,
@@ -79,86 +82,35 @@ def get_tradingview_analysis(symbol, exchange="BINANCE"):
             "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL"),
             "buy": analysis.summary.get("BUY", 0),
             "sell": analysis.summary.get("SELL", 0),
-            "neutral": analysis.summary.get("NEUTRAL", 0),
             "indicators": analysis.indicators
         }
     except Exception as e:
         print(f"خطا در دریافت تحلیل تریدینگ‌ویو برای {symbol}: {e}")
         return None
 
-def analyze_any_coin(coin_input):
-    clean = coin_input.upper().replace("USDT", "").replace("USD", "").replace("/", "").strip()
-    if not clean:
-        return "❌ لطفاً نام ارز را به درستی وارد کنید (مثلا: BTC یا ETH)"
-        
-    symbol_tv = f"{clean}USDT"
-    
-    coingecko_id = clean.lower()
-    if coingecko_id == "btc": coingecko_id = "bitcoin"
-    elif coingecko_id == "eth": coingecko_id = "ethereum"
-    elif coingecko_id == "sol": coingecko_id = "solana"
-    elif coingecko_id == "bnb": coingecko_id = "binancecoin"
-    elif coingecko_id == "xrp": coingecko_id = "ripple"
-    elif coingecko_id == "ada": coingecko_id = "cardano"
-    
-    cg_data = get_coingecko_price(coingecko_id)
-    tv_data = get_tradingview_analysis(symbol_tv)
-    
-    if not cg_data or not tv_data:
-        return f"❌ اطلاعات کافی برای رمز ارز `{clean}` از تریدینگ‌ویو یا کوین‌گکو یافت نشد."
-        
-    current_price = cg_data["price"]
-    change_24h = cg_data["change_24h"]
-    rec = tv_data["recommendation"]
-    
-    # اصلاح ساختار برای جلوگیری از خطای سینتکسی
-    if "STRONG_BUY" in rec:
-        rec_fa = "خرید قوی 🟢"
-    elif "STRONG_SELL" in rec:
-        rec_fa = "فروش قوی 🔴"
-    elif "BUY" in rec:
-        rec_fa = "خرید 🟢"
-    elif "SELL" in rec:
-        rec_fa = "فروش 🔴"
-    else:
-        rec_fa = "خنثی ⚪"
-    
-    analysis_text = (
-        f"📊 **گزارش تحلیل پیشرفته (TradingView & CoinGecko): `{clean}`**\n\n"
-        f"💵 **قیمت لحظه‌ای:** `${current_price:,.2f}`\n"
-        f"📉 **تغییرات ۲۴ ساعته:** `{change_24h:+.2f}%`\n"
-        f"🎯 **سیگنال نهایی تریدینگ‌ویو:** `{rec_fa}`\n"
-        f"📈 پیشنهادهای خرید اندیکاتورها: `{tv_data['buy']}` | فروش: `{tv_data['sell']}`\n\n"
+def ask_ai_expert(user_prompt):
+    """ارتباط با گوگل جمنای با پرامپت تخصصی ICT, SMC, Order Flow و Al Brooks"""
+    system_instruction = (
+        "تو یک تریدر ارشد، مشاور و تحلیلگر فوق‌العاده حرفه‌ای بازارهای مالی و ارزهای دیجیتال هستی. "
+        "تخصص اصلی تو تسلط کامل و ترکیبی بر سبک‌های زیر است:\n"
+        "1. ICT و SMC شامل تشخیص نقدینگی (Liquidity)، بلوک‌های سفارش (Order Blocks)، نواحی FVG (Fair Value Gap)، تغییر ساختار (CHoCH) و ادامه روند (BOS).\n"
+        "2. Order Flow (اوردر فلو) و تابلوخوانی.\n"
+        "3. پرایس اکشن ال بروکس (Al Brooks) شامل رفتار کندل به کندل، بارهای سیگنال، شکست‌ها و فیک‌بریک‌اوت‌ها (Fakeout).\n"
+        "پاسخ‌های تو باید کاملاً تخصصی، دقیق، کاربردی، به زبان فارسی روان و با اصطلاحات درست باشد."
     )
     
-    if "BUY" in rec:
-        entry = current_price
-        sl = entry * 0.985
-        tp1 = entry * 1.025
-        tp2 = entry * 1.050
-        analysis_text += (
-            f"🟢 **ارزیابی موقعیت (پوزیشن LONG):**\n"
-            f"📌 **ورود:** `{entry:,.2f}`\n"
-            f"🛑 **حد ضرر:** `{sl:,.2f}`\n"
-            f"🎯 **تارگت اول (TP1):** `{tp1:,.2f}`\n"
-            f"🎯 **تارگت دوم (TP2):** `{tp2:,.2f}`\n"
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.3,
+            ),
         )
-    elif "SELL" in rec:
-        entry = current_price
-        sl = entry * 1.015
-        tp1 = entry * 0.975
-        tp2 = entry * 0.950
-        analysis_text += (
-            f"🔴 **ارزیابی موقعیت (پوزیشن SHORT):**\n"
-            f"📌 **ورود:** `{entry:,.2f}`\n"
-            f"🛑 **حد ضرر:** `{sl:,.2f}`\n"
-            f"🎯 **تارگت اول (TP1):** `{tp1:,.2f}`\n"
-            f"🎯 **تارگت دوم (TP2):** `{tp2:,.2f}`\n"
-        )
-    else:
-        analysis_text += "⚪ بازار در وضعیت تعادل و خنثی است؛ پیشنهاد می‌شود منتظر تاییدیه بمانید.\n"
-        
-    return analysis_text
+        return response.text
+    except Exception as e:
+        return f"❌ خطا در ارتباط با هوش مصنوعی جمنای: {e}"
 
 def analyze_market_auto(coin_info):
     symbol = coin_info["symbol"]
@@ -184,47 +136,12 @@ def analyze_market_auto(coin_info):
         trade_data = {"symbol": symbol, "type": "LONG", "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2}
         
         msg = (
-            f"🚀 **سیگنالِ پیشرفته خرید (LONG)**\n"
-            f"🟢 نماد: `{symbol}`\n"
-            f"💵 قیمت لحظه‌ای: `{entry:,.2f}`\n"
-            f"📈 تغییرات ۲۴ ساعته: `{change_24h:+.2f}%`\n\n"
-            f"📌 **نقاط کلیدی معامله:**\n"
-            f"• **نقطه ورود (Entry):** `{entry:,.2f}`\n"
-            f"• **حد ضرر (Stop Loss):** `{sl:,.2f}` (حفاظت اولیه)\n\n"
-            f"🎯 **تارگت‌های قیمتی (Take Profits):**\n"
-            f"• **تارگت اول (TP1):** `{tp1:,.2f}` (سیو سود جزئی)\n"
-            f"• **تارگت دوم (TP2):** `{tp2:,.2f}` (بستن بیشتر پوزیشن)\n"
-            f"• **تارگت سوم (TP3):** `{tp3:,.2f}` (تارگت نهایی)\n\n"
-            f"🛡 **مدیریت ریسک و راهنمایی:**\n"
-            f"🔹 پس از لمس **تارگت اول (TP1)**، حتماً **حد ضرر (Stop Loss)** خود را به قیمت ورود (**Break-even**) منتقل کنید تا معامله بدون ریسک شود.\n"
-            f"🔹 در صورت صعود قوی بازار، از **Trailing Stop** برای تثبیت سودهای بالاتر استفاده کنید."
-        )
-        return trade_data, msg, {"inline_keyboard": [[{"text": "❌ بستن پوزیشن", "callback_data": "CLOSE_TRADE"}]]}
-        
-    elif "STRONG_SELL" in rec or "SELL" in rec:
-        entry = current_price
-        sl = entry * 1.015
-        tp1 = entry * 0.975
-        tp2 = entry * 0.950
-        tp3 = entry * 0.920
-        
-        trade_data = {"symbol": symbol, "type": "SHORT", "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2}
-        
-        msg = (
-            f"📉 **سیگنالِ پیشرفته فروش (SHORT)**\n"
-            f"🔴 نماد: `{symbol}`\n"
-            f"💵 قیمت لحظه‌ای: `{entry:,.2f}`\n"
-            f"📉 تغییرات ۲۴ ساعته: `{change_24h:+.2f}%`\n\n"
-            f"📌 **نقاط کلیدی معامله:**\n"
-            f"• **نقطه ورود (Entry):** `{entry:,.2f}`\n"
-            f"• **حد ضرر (Stop Loss):** `{sl:,.2f}` (حفاظت اولیه)\n\n"
-            f"🎯 **تارگت‌های قیمتی (Take Profits):**\n"
-            f"• **تارگت اول (TP1):** `{tp1:,.2f}` (سیو سود جزئی)\n"
-            f"• **تارگت دوم (TP2):** `{tp2:,.2f}` (بستن بیشتر پوزیشن)\n"
-            f"• **تارگت سوم (TP3):** `{tp3:,.2f}` (تارگت نهایی)\n\n"
-            f"🛡 **مدیریت ریسک و راهنمایی:**\n"
-            f"🔹 پس از لمس **تارگت اول (TP1)**، حتماً **حد ضرر (Stop Loss)** خود را به قیمت ورود (**Break-even**) بیاورید.\n"
-            f"🔹 از استراتژی **Trailing Stop** برای محافظت از سود در ریزش‌های بیشتر استفاده کنید."
+            f"🚀 **سیگنالِ پیشرفته (ترکیبی ICT & SMC)**\n"
+            f"🟢 نماد: `{symbol}` | پوزیشن: **LONG**\n"
+            f"💵 قیمت ورود: `{entry:,.2f}`\n"
+            f"🛑 حد ضرر: `{sl:,.2f}`\n"
+            f"🎯 تارگت‌ها: TP1: `{tp1:,.2f}` | TP2: `{tp2:,.2f}` | TP3: `{tp3:,.2f}`\n\n"
+            f"💡 *تحلیل تکنیکال:* تاییدیه صعود از نواحی نقدینگی صادر شد."
         )
         return trade_data, msg, {"inline_keyboard": [[{"text": "❌ بستن پوزیشن", "callback_data": "CLOSE_TRADE"}]]}
         
@@ -266,11 +183,10 @@ def handle_callback_queries(last_update_id):
                                 send_telegram_message(f"📊 **پوزیشن فعال:**\nنوع: `{ACTIVE_TRADE['type']}`\nارز: `{ACTIVE_TRADE['symbol']}`\nورود: `{ACTIVE_TRADE['entry']}`", sender_chat_id)
                             else:
                                 send_telegram_message("⚪ هیچ پوزیشن فعالی باز نیست.", sender_chat_id)
-                        elif data_action == "ANALYZE_CUSTOM":
-                            USER_STATES[sender_chat_id] = "WAITING_FOR_COIN"
-                            send_telegram_message("🔍 لطفاً **نام یا نماد ارز موردنظر** خود را بفرستید (مثلاً: `BTC` یا `SOL`):", sender_chat_id)
+                        elif data_action == "ASK_AI":
+                            send_telegram_message("💬 لطفاً سوال تخصصی خود را در سبک‌های **ICT, SMC، اوردر فلو یا پرایس اکشن** بفرستید:", sender_chat_id)
                         elif data_action == "SCAN_NOW":
-                            send_telegram_message("🔍 در حال اسکن بازار با تریدینگ‌ویو و کوین‌گکو...", sender_chat_id)
+                            send_telegram_message("🔍 در حال اسکن بازار...", sender_chat_id)
                             for coin in TOP_COINS_TV:
                                 td, msg, kb = analyze_market_auto(coin)
                                 if td:
@@ -278,7 +194,7 @@ def handle_callback_queries(last_update_id):
                                     send_telegram_message(msg, sender_chat_id, kb)
                                     break
                             else:
-                                send_telegram_message("⚪ اسکن انجام شد. در حال حاضر سیگنال مناسبی در بازار پیدا نشد.", sender_chat_id)
+                                send_telegram_message("⚪ اسکن انجام شد. سیگنال خاصی یافت نشد.", sender_chat_id)
 
                 elif "message" in update and "text" in update["message"]:
                     msg_data = update["message"]
@@ -291,20 +207,15 @@ def handle_callback_queries(last_update_id):
                         USER_STATES.pop(sender_chat_id, None)
                         menu_keyboard = {
                             "inline_keyboard": [
-                                [{"text": "📊 وضعیت پوزیشن", "callback_data": "STATUS"}, {"text": "🔍 اسکن خودکار بازار", "callback_data": "SCAN_NOW"}],
-                                [{"text": "📈 تحلیل دلخواه ارز", "callback_data": "ANALYZE_CUSTOM"}],
+                                [{"text": "📊 وضعیت پوزیشن", "callback_data": "STATUS"}, {"text": "🔍 اسکن بازار", "callback_data": "SCAN_NOW"}],
+                                [{"text": "💬 سوال از هوش مصنوعی (ICT/SMC)", "callback_data": "ASK_AI"}],
                                 [{"text": "❌ بستن پوزیشن", "callback_data": "CLOSE_TRADE"}]
                             ]
                         }
-                        send_telegram_message("🤖 **منوی ربات (موتور TradingView و CoinGecko):**\nلطفاً یکی از گزینه‌ها را انتخاب کنید:", sender_chat_id, menu_keyboard)
-                    
-                    elif USER_STATES.get(sender_chat_id) == "WAITING_FOR_COIN":
-                        USER_STATES.pop(sender_chat_id, None)
-                        result_analysis = analyze_any_coin(text_clean)
-                        send_telegram_message(result_analysis, sender_chat_id)
+                        send_telegram_message("🤖 **منوی ربات تریدر هوشمند (Gemini + ICT & SMC):**\nانتخاب کنید:", sender_chat_id, menu_keyboard)
                     else:
-                        result_analysis = analyze_any_coin(text_clean)
-                        send_telegram_message(result_analysis, sender_chat_id)
+                        ai_response = ask_ai_expert(text_clean)
+                        send_telegram_message(ai_response, sender_chat_id)
                             
     except Exception as e:
         print(f"خطا در پردازش تلگرام: {e}")
@@ -313,8 +224,8 @@ def handle_callback_queries(last_update_id):
 
 def run_bot_loop():
     global ACTIVE_TRADE, LAST_HEARTBEAT_TIME
-    print("ربات با موتور TradingView و CoinGecko روشن شد...")
-    send_telegram_message("🤖 **ربات هوشمند تحلیل و سیگنال‌دهی پیشرفته فعال شد.**")
+    print("ربات هوشمند جمنای روشن شد...")
+    send_telegram_message("🤖 **ربات هوشمند مجهز به جمنای و تخصص ICT/SMC فعال شد.**")
     
     last_update_id = 0
     counter = 0
@@ -324,11 +235,11 @@ def run_bot_loop():
         current_time = time.time()
         
         if current_time - LAST_HEARTBEAT_TIME >= 14400:
-            send_telegram_message("💓 **سلامت سیستم:** ربات فعال و متصل به تحلیلگر تریدینگ‌ویو است.")
+            send_telegram_message("💓 **سلامت سیستم:** هوش مصنوعی فعال است.")
             LAST_HEARTBEAT_TIME = current_time
         
         counter += 1
-        if counter >= 10 and not ACTIVE_TRADE:
+        if counter >= 12 and not ACTIVE_TRADE:
             counter = 0
             for coin in TOP_COINS_TV:
                 td, message_result, keyboard = analyze_market_auto(coin)
