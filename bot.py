@@ -4,8 +4,6 @@ from flask import Flask
 import threading
 import json
 from datetime import datetime
-from google import genai
-from google.genai import types
 from tradingview_ta import TA_Handler, Interval
 
 # --- تنظیمات وب‌سرور ---
@@ -22,11 +20,8 @@ def run_web():
 TOKEN = "8905848713:AAGrGzm8vqX1_ZGh9C7mmIPO0dRM430x1bA"
 CHAT_ID = "927615637"
 
-# کلید API گوگل جمنای شما
-GEMINI_API_KEY = "AQ.Ab8RN6IXX6wOi5ujmFH0IqQd0KpJvDjwN6xyd0UC5nZxY86KWQ"
-
-# راه‌اندازی کلاینت جمنای
-client = genai.Client(api_key=GEMINI_API_KEY)
+# جدیدترین کلید API شما
+GEMINI_API_KEY = "AQ.Ab8RN6Kzpb3DfA25-nulJAcs-FcY0R0pB7V-kj15r6UOTN1wOQ"
 
 # نمادها برای تریدینگ‌ویو و کوین‌گکو
 TOP_COINS_TV = [
@@ -89,7 +84,13 @@ def get_tradingview_analysis(symbol, exchange="BINANCE"):
         return None
 
 def ask_ai_expert(user_prompt):
-    """ارتباط با گوگل جمنای با پرامپت تخصصی ICT, SMC, Order Flow و Al Brooks"""
+    """ارتباط مستقیم با جمنای به روش HTTP API با کلید جدید"""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": GEMINI_API_KEY
+    }
+    
     system_instruction = (
         "تو یک تریدر ارشد، مشاور و تحلیلگر فوق‌العاده حرفه‌ای بازارهای مالی و ارزهای دیجیتال هستی. "
         "تخصص اصلی تو تسلط کامل و ترکیبی بر سبک‌های زیر است:\n"
@@ -99,16 +100,23 @@ def ask_ai_expert(user_prompt):
         "پاسخ‌های تو باید کاملاً تخصصی، دقیق، کاربردی، به زبان فارسی روان و با اصطلاحات درست باشد."
     )
     
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": f"{system_instruction}\n\nسوال کاربر: {user_prompt}"}
+                ]
+            }
+        ]
+    }
+    
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.3,
-            ),
-        )
-        return response.text
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        res_data = response.json()
+        if "candidates" in res_data:
+            return res_data["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            return f"❌ خطای پاسخ از سرور گوگل: {res_data}"
     except Exception as e:
         return f"❌ خطا در ارتباط با هوش مصنوعی جمنای: {e}"
 
@@ -123,7 +131,6 @@ def analyze_market_auto(coin_info):
         return None, None, None
         
     current_price = cg_data["price"]
-    change_24h = cg_data["change_24h"]
     rec = tv_data["recommendation"]
     
     if "STRONG_BUY" in rec or "BUY" in rec:
