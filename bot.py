@@ -1,6 +1,20 @@
 import time
 import requests
+from flask import Flask
+import threading
 
+# --- تنظیمات وب‌سرور برای سازگاری با Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Trading Bot is running 24/7!"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
+
+
+# --- تنظیمات ربات تلگرام ---
 TOKEN = "8905848713:AAGrGzm8vqX1_ZGh9C7mmIPO0dRM430x1bA"
 CHAT_ID = "927615637"
 
@@ -68,7 +82,6 @@ def analyze_market_multi_timeframe(symbol):
     1. بررسی روند 4 ساعته و ناحیه کلیدی در 15 دقیقه
     2. بررسی تاییدیه سریع‌تر در تایم‌فریم پایین‌تر (مثلا 5 دقیقه) برای ورود بهینه
     """
-    # ۱. بررسی روند کلان ۴ ساعته
     candles_4h = get_binance_candles(symbol, interval="4h", limit=5)
     if not candles_4h:
         return None, None
@@ -76,7 +89,6 @@ def analyze_market_multi_timeframe(symbol):
     if trend_4h != "BULLISH":
         return None, None
         
-    # ۲. بررسی ناحیه در تایم‌فریم 15 دقیقه
     candles_15m = get_binance_candles(symbol, interval="15m", limit=15)
     if not candles_15m or len(candles_15m) < 10:
         return None, None
@@ -87,19 +99,13 @@ def analyze_market_multi_timeframe(symbol):
     has_fvg = c3['low'] > c1['high']
     fvg_level = (c1['high'] + c3['low']) / 2 if has_fvg else 0
     
-    # اگر قیمت در ناحیه حمایتی 15 دقیقه بود
     if has_fvg or (current_price <= fvg_level * 1.015):
-        
-        # ۳. **سوییچ هوشمند به تایم‌فریم پایین‌تر (5 دقیقه)** برای گرفتن تاییدیه سریع‌تر و دقیق‌تر
         candles_5m = get_binance_candles(symbol, interval="5m", limit=10)
         has_5m_confirmation = check_candle_confirmation(candles_5m)
         
-        # اگر تایم 5 دقیقه تاییدیه داد یا تایم 15 دقیقه تایید داد
         if has_5m_confirmation:
             entry_1 = current_price
             entry_2 = entry_1 * 0.994
-            
-            # استفاده از کف کندل 5 دقیقه یا 15 دقیقه برای حد ضرر بهینه‌تر
             stop_loss = min(candles_5m[-1]['low'], c1['low']) * 0.995
             risk = entry_1 - stop_loss
             
@@ -218,9 +224,9 @@ def check_telegram_updates(last_update_id):
         
     return last_update_id
 
-if __name__ == "__main__":
-    print("دستیار هوشمند چندتایم‌فریمه روشن شد...")
-    send_telegram_message("🤖 **سیستم ترید چندتایم‌فریمه (15m + 5m) استارت خورد.** آماده شکار پوزیشن‌های بهینه.")
+def run_bot_loop():
+    print("دستیار هوشمند چندتایم‌فریمه روی وب‌سرور روشن شد...")
+    send_telegram_message("🤖 **سیستم ترید چندتایم‌فریمه (15m + 5m) روی سرور ابری استارت خورد.**")
     
     last_update_id = 0
     counter = 0
@@ -247,3 +253,12 @@ if __name__ == "__main__":
                     time.sleep(1)
                     
         time.sleep(5)
+
+if __name__ == "__main__":
+    # اجرای ربات در یک Thread جداگانه برای فعالیت همزمان با وب‌سرور
+    bot_thread = threading.Thread(target=run_bot_loop)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # اجرای وب‌سرور Flask برای راضی نگه داشتن سایت Render
+    run_web()
