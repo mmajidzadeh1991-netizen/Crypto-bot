@@ -4,7 +4,7 @@ from flask import Flask
 import threading
 import json
 
-# --- تنظیمات وب‌سرور برای سازگاری با Railway/Render ---
+# --- تنظیمات وب‌سرور ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -61,7 +61,6 @@ def get_binance_candles(symbol, interval="15m", limit=20):
         return None
 
 def check_whale_and_volume(candles):
-    """بررسی حجم غیرعادی (ورود نهنگ‌ها یا پول سنگین)"""
     if not candles or len(candles) < 10:
         return False
     volumes = [c['volume'] for c in candles[:-1]]
@@ -70,16 +69,15 @@ def check_whale_and_volume(candles):
     return last_volume >= (avg_volume * 2.5)
 
 def analyze_market_multi_timeframe(symbol):
-    # بررسی روند کلان ۴ ساعته
     candles_4h = get_binance_candles(symbol, interval="4h", limit=5)
     if not candles_4h:
-        return None, None
+        return None, None, None
         
     trend_4h = "BULLISH" if candles_4h[-1]['close'] > candles_4h[-3]['open'] else "BEARISH"
         
     candles_15m = get_binance_candles(symbol, interval="15m", limit=15)
     if not candles_15m or len(candles_15m) < 10:
-        return None, None
+        return None, None, None
         
     current_price = candles_15m[-1]['close']
     c1 = candles_15m[-3]
@@ -87,14 +85,11 @@ def analyze_market_multi_timeframe(symbol):
     
     candles_5m = get_binance_candles(symbol, interval="5m", limit=10)
     if not candles_5m or len(candles_5m) < 2:
-        return None, None
+        return None, None, None
         
-    prev_5m = candles_5m[-2]
     last_5m = candles_5m[-1]
-    
     is_whale_activity = check_whale_and_volume(candles_5m)
 
-    # 🟢 سناریوی صعودی (LONG)
     if trend_4h == "BULLISH":
         has_fvg = c3['low'] > c1['high']
         fvg_level = (c1['high'] + c3['low']) / 2 if has_fvg else 0
@@ -111,7 +106,7 @@ def analyze_market_multi_timeframe(symbol):
                 risk = entry_1 - stop_loss
                 
                 if risk <= 0:
-                    return None, None
+                    return None, None, None
                     
                 tp1 = entry_1 + (risk * 1.5)
                 tp2 = entry_1 + (risk * 2.5)
@@ -137,7 +132,6 @@ def analyze_market_multi_timeframe(symbol):
                 keyboard = {"inline_keyboard": [[{"text": "❌ بستن معامله", "callback_data": "CLOSE_TRADE"}, {"text": "📊 وضعیت", "callback_data": "STATUS"}]]}
                 return trade_data, signal_text, keyboard
 
-    # 🔴 سناریوی نزولی (SHORT)
     elif trend_4h == "BEARISH":
         has_fvg_short = c3['high'] < c1['low']
         fvg_level_short = (c1['low'] + c3['high']) / 2 if has_fvg_short else 0
@@ -154,7 +148,7 @@ def analyze_market_multi_timeframe(symbol):
                 risk = stop_loss - entry_1
                 
                 if risk <= 0:
-                    return None, None
+                    return None, None, None
                     
                 tp1 = entry_1 - (risk * 1.5)
                 tp2 = entry_1 - (risk * 2.5)
@@ -299,7 +293,7 @@ def handle_callback_queries(last_update_id):
     return last_update_id
 
 def run_bot_loop():
-    global LAST_HEARTBEAT_TIME
+    global ACTIVE_TRADE, LAST_HEARTBEAT_TIME
     print("ربات دوطرفه (Long & Short) + هوش نهنگ روشن شد...")
     send_telegram_message("🤖 **سیستم معاملاتی دوطرفه (Long/Short) فعال شد.** ربات بازار را از هر دو جهت رصد می‌کند.")
     
@@ -309,7 +303,6 @@ def run_bot_loop():
     while True:
         last_update_id = handle_callback_queries(last_update_id)
         
-        # ارسال پیام زنده بودن (Heartbeat) هر ۴ ساعت یک‌بار
         current_time = time.time()
         if current_time - LAST_HEARTBEAT_TIME >= 14400:
             send_telegram_message("💓 **گزارش سلامت سیستم:** ربات کاملاً بیدار است و به صورت ۲۴ ساعته بازار را رصد می‌کند.")
