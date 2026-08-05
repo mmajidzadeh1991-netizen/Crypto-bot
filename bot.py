@@ -1,266 +1,247 @@
-import time
+import os
 import requests
-from flask import Flask
+import time
 import threading
-import json
 from datetime import datetime
+from flask import Flask, request
 from tradingview_ta import TA_Handler, Interval
 
-# --- تنظیمات وب‌سرور ---
+# تنظیمات اصلی
+TELEGRAM_BOT_TOKEN = "8905848713:AAGrGzm8vqX1_ZGh9C7mmIPO0dRM430x1bA"
+DEFAULT_CHAT_ID = "927615637"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "Gemini-Powered ICT & SMC Trading Bot is running 24/7!"
+# حافظه داخلی برای ژورنال معامله‌گری و یادگیری ربات (ثبت عیب‌یابی‌ها و تجربه بازار)
+TRADING_JOURNAL = {
+    "past_signals": [],
+    "lessons_learned": [
+        "در بازارهای رنج ۴ ساعته، ورود در تایم ۱۵ دقیقه نیاز به تاییدیه شکست واقعی دارد.",
+        "اگر کندل تثبیت ۱۵ دقیقه بسته نشود، احتمال فیک‌بریک‌اوت در نواحی FVG بالاست."
+    ]
+}
 
-def run_web():
-    app.run(host="0.0.0.0", port=10000)
-
-# --- تنظیمات ربات تلگرام و گوگل جمنای ---
-TOKEN = "8905848713:AAGrGzm8vqX1_ZGh9C7mmIPO0dRM430x1bA"
-CHAT_ID = "927615637"
-
-# جدیدترین کلید API شما
-GEMINI_API_KEY = "AQ.Ab8RN6Kzpb3DfA25-nulJAcs-FcY0R0pB7V-kj15r6UOTN1wOQ"
-
-# نمادها برای تریدینگ‌ویو و کوین‌گکو
-TOP_COINS_TV = [
-    {"symbol": "BTCUSDT", "exchange": "BINANCE", "coingecko_id": "bitcoin"},
-    {"symbol": "ETHUSDT", "exchange": "BINANCE", "coingecko_id": "ethereum"},
-    {"symbol": "SOLUSDT", "exchange": "BINANCE", "coingecko_id": "solana"}
+TOP_COINS = [
+    {"symbol": "BTCUSDT", "exchange": "BINANCE", "name": "بیت‌کوین (BTC)"},
+    {"symbol": "ETHUSDT", "exchange": "BINANCE", "name": "اتریوم (ETH)"},
+    {"symbol": "SOLUSDT", "exchange": "BINANCE", "name": "سولانا (SOL)"},
+    {"symbol": "XRPUSDT", "exchange": "BINANCE", "name": "ریپل (XRP)"},
+    {"symbol": "BNBUSDT", "exchange": "BINANCE", "name": "بایننس کوین (BNB)"},
+    {"symbol": "ADAUSDT", "exchange": "BINANCE", "name": "کاردانو (ADA)"},
+    {"symbol": "AVAXUSDT", "exchange": "BINANCE", "name": "اولانچ (AVAX)"},
+    {"symbol": "LINKUSDT", "exchange": "BINANCE", "name": "چین‌لینک (LINK)"}
 ]
 
-LAST_HEARTBEAT_TIME = time.time()
-ACTIVE_TRADE = None
-USER_STATES = {}
-
-def send_telegram_message(message, chat_id=CHAT_ID, reply_markup=None):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+def send_telegram_message(chat_id, text, reply_markup=None):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": message,
+        "text": text,
         "parse_mode": "Markdown"
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
         
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        return response.json()
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"خطا در ارسال پیام: {e}")
+        print(f"Error sending message: {e}")
 
-def get_coingecko_price(coin_id):
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
-    try:
-        res = requests.get(url, timeout=10)
-        data = res.json()
-        if coin_id in data:
-            return {
-                "price": data[coin_id]["usd"],
-                "change_24h": data[coin_id].get("usd_24h_change", 0.0)
-            }
-    except Exception as e:
-        print(f"خطا در دریافت قیمت از کوین‌گکو برای {coin_id}: {e}")
-    return None
+# تابع هوش مصنوعی با قابلیت یادگیری، ژورنال و تحلیل چندتایم‌فریمه عمیق
+def ask_groq_ai_advanced(prompt_text):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # تزریق درس‌های آموخته‌شده قبلی به حافظه هوش مصنوعی برای یادگیری مداوم
+    lessons_str = "\n".join([f"- {lesson}" for lesson in TRADING_JOURNAL["lessons_learned"]])
+    
+    system_prompt = (
+        "تو یک تریدر نهادی هوشمند، الگوریتمی و خودآموز در بازارهای مالی هستی. "
+        "تخصص مطلق تو سبک‌های ICT (اسمارت مانی)، SMC، اوردر فلو و پرایس اکشن ال بروکس است. "
+        "تو مجهز به تحلیل چندتایم‌فریمه عمیق هستی: روند ساختاری کلان در **۴ ساعته**، جهت مومنتوم در **۱ ساعته**، نقطه ورود دقیق در **۱۵ دقیقه**، و بررسی تثبیت کندل‌ها در **تایم‌فریم‌های پایین‌تر (مثلا ۵ دقیقه)**. "
+        "کاربر به شدت روی دقت بالا، تعیین درصد موفقیت دقیق (مثلا 88%) و کیفیت سیگنال تاکید دارد. روزانه به چند سیگنال عالی با کیفیت بالا نیاز داریم. "
+        "همچنین تو باید از تجربیات و ژورنال معاملات قبلی یاد بگیری تا خطاهای گذشته را تکرار نکنی.\n\n"
+        f"📚 **تجربیات و درس‌های آموخته‌شده قبلی (برای بهبود دقت):**\n{lessons_str}\n\n"
+        "اگر بازار شرایط مناسبی دارد، خروجی باید یک سیگنال دقیق با این ساختار باشد:\n"
+        "1. جهت پوزیشن (Long یا Short)\n"
+        "2. درصد تاییدیه یا موفقیت (مثلا 87%)\n"
+        "3. نقطه ورود اول (Entry 1) و نقطه ورود دوم (پله‌ای/DCA)\n"
+        "4. حد ضرر (Stop Loss) دقیق بر اساس ساختار ۴ ساعته\n"
+        "5. سه سطح حد سود (TP1, TP2, TP3)\n"
+        "6. مدیریت معامله شامل: نقطه ریسک‌فری (Risk-Free) و استراتژی تریلینگ استاپ (Trailing Stop)\n"
+        "7. تحلیل فنی و چندتایم‌فریمه کامل (توضیح روند ۴ ساعته، ۱ ساعته، و تاییدیه کندلی در ۱۵ دقیقه/تایم پایین‌تر)."
+    )
 
-def get_tradingview_analysis(symbol, exchange="BINANCE"):
+    payload = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt_text}
+        ],
+        "temperature": 0.25,
+        "max_tokens": 1200
+    }
+
     try:
-        handler = TA_Handler(
-            symbol=symbol,
-            exchange=exchange,
-            screener="crypto",
-            interval=Interval.INTERVAL_1_HOUR
-        )
-        analysis = handler.get_analysis()
-        return {
-            "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL"),
-            "buy": analysis.summary.get("BUY", 0),
-            "sell": analysis.summary.get("SELL", 0),
-            "indicators": analysis.indicators
-        }
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        res_data = response.json()
+        if "choices" in res_data:
+            return res_data["choices"][0]["message"]["content"]
+        else:
+            return None
     except Exception as e:
-        print(f"خطا در دریافت تحلیل تریدینگ‌ویو برای {symbol}: {e}")
+        print(f"Groq API Error: {e}")
         return None
 
-def ask_ai_expert(user_prompt):
-    """ارتباط مستقیم با جمنای به روش HTTP API با کلید جدید"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "X-goog-api-key": GEMINI_API_KEY
-    }
-    
-    system_instruction = (
-        "تو یک تریدر ارشد، مشاور و تحلیلگر فوق‌العاده حرفه‌ای بازارهای مالی و ارزهای دیجیتال هستی. "
-        "تخصص اصلی تو تسلط کامل و ترکیبی بر سبک‌های زیر است:\n"
-        "1. ICT و SMC شامل تشخیص نقدینگی (Liquidity)، بلوک‌های سفارش (Order Blocks)، نواحی FVG (Fair Value Gap)، تغییر ساختار (CHoCH) و ادامه روند (BOS).\n"
-        "2. Order Flow (اوردر فلو) و تابلوخوانی.\n"
-        "3. پرایس اکشن ال بروکس (Al Brooks) شامل رفتار کندل به کندل، بارهای سیگنال، شکست‌ها و فیک‌بریک‌اوت‌ها (Fakeout).\n"
-        "پاسخ‌های تو باید کاملاً تخصصی، دقیق، کاربردی، به زبان فارسی روان و با اصطلاحات درست باشد."
-    )
-    
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": f"{system_instruction}\n\nسوال کاربر: {user_prompt}"}
-                ]
-            }
-        ]
-    }
-    
+# تابع تحلیل چندتایم‌فریمه بازار (4H, 1H, 15M)
+def analyze_multi_timeframe(coin):
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
-        res_data = response.json()
-        if "candidates" in res_data:
-            return res_data["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return f"❌ خطای پاسخ از سرور گوگل: {res_data}"
-    except Exception as e:
-        return f"❌ خطا در ارتباط با هوش مصنوعی جمنای: {e}"
+        # بررسی 4 ساعته (روند کلان)
+        h_4h = TA_Handler(symbol=coin["symbol"], exchange=coin["exchange"], screener="crypto", interval=Interval.INTERVAL_4_HOURS)
+        rec_4h = h_4h.get_analysis().summary.get("RECOMMENDATION", "NEUTRAL")
+        
+        # بررسی 1 ساعته (مومنتوم)
+        h_1h = TA_Handler(symbol=coin["symbol"], exchange=coin["exchange"], screener="crypto", interval=Interval.INTERVAL_1_HOUR)
+        ind_1h = h_1h.get_analysis().indicators
+        rec_1h = h_1h.get_analysis().summary.get("RECOMMENDATION", "NEUTRAL")
+        
+        # بررسی 15 دقیقه (نقطه ورود و تثبیت کندل)
+        h_15m = TA_Handler(symbol=coin["symbol"], exchange=coin["exchange"], screener="crypto", interval=Interval.INTERVAL_15_MINUTES)
+        ind_15m = h_15m.get_analysis().indicators
+        rec_15m = h_15m.get_analysis().summary.get("RECOMMENDATION", "NEUTRAL")
 
-def analyze_market_auto(coin_info):
-    symbol = coin_info["symbol"]
-    cg_id = coin_info["coingecko_id"]
-    
-    cg_data = get_coingecko_price(cg_id)
-    tv_data = get_tradingview_analysis(symbol)
-    
-    if not cg_data or not tv_data:
-        return None, None, None
+        close_price = ind_1h.get("close", 0)
+        rsi_15m = ind_15m.get("RSI", 0)
         
-    current_price = cg_data["price"]
-    rec = tv_data["recommendation"]
-    
-    if "STRONG_BUY" in rec or "BUY" in rec:
-        entry = current_price
-        sl = entry * 0.985
-        tp1 = entry * 1.025
-        tp2 = entry * 1.050
-        tp3 = entry * 1.080
-        
-        trade_data = {"symbol": symbol, "type": "LONG", "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2}
-        
-        msg = (
-            f"🚀 **سیگنالِ پیشرفته (ترکیبی ICT & SMC)**\n"
-            f"🟢 نماد: `{symbol}` | پوزیشن: **LONG**\n"
-            f"💵 قیمت ورود: `{entry:,.2f}`\n"
-            f"🛑 حد ضرر: `{sl:,.2f}`\n"
-            f"🎯 تارگت‌ها: TP1: `{tp1:,.2f}` | TP2: `{tp2:,.2f}` | TP3: `{tp3:,.2f}`\n\n"
-            f"💡 *تحلیل تکنیکال:* تاییدیه صعود از نواحی نقدینگی صادر شد."
+        # ارسال داده‌ها به هوش مصنوعی برای تصمیم‌گیری نهایی چندتایم‌فریمه
+        prompt = (
+            f"ارز {coin['name']} ({coin['symbol']}) برای تحلیل چندتایم‌فریمه:\n"
+            f"- وضعیت ساختاری در ۴ ساعته: {rec_4h}\n"
+            f"- وضعیت مومنتوم در ۱ ساعته: {rec_1h} (قیمت: {close_price})\n"
+            f"- وضعیت ورود در ۱۵ دقیقه: {rec_15m} (RSI: {rsi_15m})\n\n"
+            f"لطفاً وضعیت باز و بسته شدن کندل‌ها و تثبیت قیمت را بررسی کن. اگر هم‌راستایی کامل وجود دارد، سیگنال باکیفیت و درصد موفقیت بالا صادر کن."
         )
-        return trade_data, msg, {"inline_keyboard": [[{"text": "❌ بستن پوزیشن", "callback_data": "CLOSE_TRADE"}]]}
         
-    return None, None, None
-
-def handle_callback_queries(last_update_id):
-    global ACTIVE_TRADE, USER_STATES
-    if last_update_id is None:
-        last_update_id = 0
+        signal_output = ask_groq_ai_advanced(prompt)
+        return signal_output
         
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={last_update_id}&timeout=3"
-    try:
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        
-        if data.get("ok") and data.get("result"):
-            for update in data["result"]:
-                update_id = update.get("update_id")
-                if update_id is not None:
-                    last_update_id = update_id + 1
-                
-                if "callback_query" in update:
-                    callback = update["callback_query"]
-                    callback_id = callback.get("id")
-                    data_action = callback.get("data")
-                    message_obj = callback.get("message")
-                    
-                    if message_obj and "chat" in message_obj:
-                        sender_chat_id = message_obj["chat"]["id"]
-                        if callback_id:
-                            requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", json={"callback_query_id": callback_id})
-                        
-                        if data_action == "CLOSE_TRADE":
-                            ACTIVE_TRADE = None
-                            USER_STATES.pop(sender_chat_id, None)
-                            send_telegram_message("❌ پوزیشن فعال بسته شد.", sender_chat_id)
-                        elif data_action == "STATUS":
-                            if ACTIVE_TRADE:
-                                send_telegram_message(f"📊 **پوزیشن فعال:**\nنوع: `{ACTIVE_TRADE['type']}`\nارز: `{ACTIVE_TRADE['symbol']}`\nورود: `{ACTIVE_TRADE['entry']}`", sender_chat_id)
-                            else:
-                                send_telegram_message("⚪ هیچ پوزیشن فعالی باز نیست.", sender_chat_id)
-                        elif data_action == "ASK_AI":
-                            send_telegram_message("💬 لطفاً سوال تخصصی خود را در سبک‌های **ICT, SMC، اوردر فلو یا پرایس اکشن** بفرستید:", sender_chat_id)
-                        elif data_action == "SCAN_NOW":
-                            send_telegram_message("🔍 در حال اسکن بازار...", sender_chat_id)
-                            for coin in TOP_COINS_TV:
-                                td, msg, kb = analyze_market_auto(coin)
-                                if td:
-                                    ACTIVE_TRADE = td
-                                    send_telegram_message(msg, sender_chat_id, kb)
-                                    break
-                            else:
-                                send_telegram_message("⚪ اسکن انجام شد. سیگنال خاصی یافت نشد.", sender_chat_id)
-
-                elif "message" in update and "text" in update["message"]:
-                    msg_data = update["message"]
-                    raw_text = msg_data["text"]
-                    sender_chat_id = msg_data["chat"]["id"]
-                    text_clean = raw_text.strip()
-                    text_upper = text_clean.upper()
-                    
-                    if text_upper in ["/START", "/MENU", "START", "MENU"]:
-                        USER_STATES.pop(sender_chat_id, None)
-                        menu_keyboard = {
-                            "inline_keyboard": [
-                                [{"text": "📊 وضعیت پوزیشن", "callback_data": "STATUS"}, {"text": "🔍 اسکن بازار", "callback_data": "SCAN_NOW"}],
-                                [{"text": "💬 سوال از هوش مصنوعی (ICT/SMC)", "callback_data": "ASK_AI"}],
-                                [{"text": "❌ بستن پوزیشن", "callback_data": "CLOSE_TRADE"}]
-                            ]
-                        }
-                        send_telegram_message("🤖 **منوی ربات تریدر هوشمند (Gemini + ICT & SMC):**\nانتخاب کنید:", sender_chat_id, menu_keyboard)
-                    else:
-                        ai_response = ask_ai_expert(text_clean)
-                        send_telegram_message(ai_response, sender_chat_id)
-                            
     except Exception as e:
-        print(f"خطا در پردازش تلگرام: {e}")
-        
-    return last_update_id
+        print(f"Multi-TF Analysis Error for {coin['symbol']}: {e}")
+        return None
 
-def run_bot_loop():
-    global ACTIVE_TRADE, LAST_HEARTBEAT_TIME
-    print("ربات هوشمند جمنای روشن شد...")
-    send_telegram_message("🤖 **ربات هوشمند مجهز به جمنای و تخصص ICT/SMC فعال شد.**")
-    
-    last_update_id = 0
-    counter = 0
-    
+# اسکنر خودکار با قابلیت ژورنال‌نویسی و یادگیری روزانه
+def smart_trader_scanner():
+    print("🧠 ربات هوشمند چندتایم‌فریمه با قابلیت یادگیری و ژورنال‌نویسی فعال شد...")
     while True:
-        last_update_id = handle_callback_queries(last_update_id)
-        current_time = time.time()
-        
-        if current_time - LAST_HEARTBEAT_TIME >= 14400:
-            send_telegram_message("💓 **سلامت سیستم:** هوش مصنوعی فعال است.")
-            LAST_HEARTBEAT_TIME = current_time
-        
-        counter += 1
-        if counter >= 12 and not ACTIVE_TRADE:
-            counter = 0
-            for coin in TOP_COINS_TV:
-                td, message_result, keyboard = analyze_market_auto(coin)
-                if td:
-                    ACTIVE_TRADE = td
-                    send_telegram_message(message_result, reply_markup=keyboard)
-                    break
-                time.sleep(1)
+        try:
+            for coin in TOP_COINS:
+                print(f"در حال بررسی چندتایم‌فریمه {coin['symbol']}...")
+                signal = analyze_multi_timeframe(coin)
                 
-        time.sleep(5)
+                if signal and ("جهت پوزیشن" in signal or "Long" in signal or "Short" in signal):
+                    # ثبت سیگنال در ژورنال داخلی برای ردیابی و یادگیری
+                    TRADING_JOURNAL["past_signals"].append({
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "symbol": coin["symbol"],
+                        "details": signal[:100]
+                    })
+                    
+                    full_msg = f"💎 **سیگنالِ پیشرفته چندتایم‌فریمه (ICT/SMC)** 💎\n\n{signal}"
+                    send_telegram_message(DEFAULT_CHAT_ID, full_msg)
+                    
+                    # استراحت هوشمند برای حفظ کیفیت سیگنال‌های روزانه
+                    time.sleep(10800) # ۳ ساعت فاصله برای تحلیل بعدی
+                
+                time.sleep(45)
+                
+        except Exception as e:
+            print(f"Scanner Loop Error: {e}")
+            
+        time.sleep(14400)
+
+@app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = request.get_json()
+    
+    if "callback_query" in update:
+        callback = update["callback_query"]
+        chat_id = callback["message"]["chat"]["id"]
+        data = callback["data"]
+        
+        # اگر کاربر دکمه گزارش ژورنال یا وضعیت یادگیری را خواست
+        if data == "JOURNAL_STATS":
+            journal_msg = (
+                "📖 **ژورنال معامله‌گری و وضعیت یادگیری ربات:**\n\n"
+                f"🔹 تعداد کل سیگنال‌های ثبت‌شده در حافظه: `{len(TRADING_JOURNAL['past_signals'])}\n`"
+                f"🧠 **آخرین درس‌ها و عیب‌یابی‌های خودآموز ربات:**\n" + "\n".join([f"• {l}" for l in TRADING_JOURNAL['lessons_learned']])
+            )
+            send_telegram_message(chat_id, journal_msg)
+            return "ok", 200
+
+        send_telegram_message(chat_id, f"⏳ در حال تحلیل چندتایم‌فریمه عمیق (4H, 1H, 15M) برای {data}...")
+        ai_response = ask_groq_ai_advanced(f"لطفاً تحلیل کامل چندتایم‌فریمه، درصد موفقیت، نقاط ورود، استاپ، ریسک‌فری و تریلینگ استاپ را برای ارز {data} ارائه بده.")
+        if ai_response:
+            send_telegram_message(chat_id, ai_response)
+        else:
+            send_telegram_message(chat_id, "❌ خطا در پردازش تحلیل.")
+        return "ok", 200
+
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
+
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "🪙 بیت‌کوین (BTC)", "callback_data": "BTCUSDT"},
+                    {"text": "Ξ اتریوم (ETH)", "callback_data": "ETHUSDT"}
+                ],
+                [
+                    {"text": "⚡ سولانا (SOL)", "callback_data": "SOLUSDT"},
+                    {"text": "💎 ریپل (XRP)", "callback_data": "XRPUSDT"}
+                ],
+                [
+                    {"text": "🟢 بایننس کوین (BNB)", "callback_data": "BNBUSDT"},
+                    {"text": "🟣 کاردانو (ADA)", "callback_data": "ADAUSDT"}
+                ],
+                [
+                    {"text": "🔺 اولانچ (AVAX)", "callback_data": "AVAXUSDT"},
+                    {"text": "🔗 چین‌لینک (LINK)", "callback_data": "LINKUSDT"}
+                ],
+                [
+                    {"text": "📖 ژورنال و وضعیت یادگیری هوش مصنوعی", "callback_data": "JOURNAL_STATS"}
+                ]
+            ]
+        }
+
+        if text.startswith("/start") or text.startswith("/help"):
+            welcome_msg = (
+                "🤖 **سیستم تریدر هوشمند خودآموز (مولتی تایم‌فریم + ژورنال)**\n\n"
+                "سلام! من به صورت ۲۴ ساعته بازار را در تایم‌فریم‌های **۴ ساعته، ۱ ساعته و ۱۵ دقیقه** مانیتور می‌کنم.\n"
+                "ربات دارای سیستم **ژورنال معامله‌گری و یادگیری خودکار** است تا کیفیت سیگنال‌ها روز به روز بیشتر شود. از منوی زیر می‌توانید ارزها را بررسی کنید یا گزارش ژورنال را ببینید:"
+            )
+            send_telegram_message(chat_id, welcome_msg, reply_markup=keyboard)
+        else:
+            send_telegram_message(chat_id, "⏳ در حال بررسی هم‌راستایی ساختار در چند تایم‌فریم...")
+            ai_response = ask_groq_ai_advanced(f"لطفاً تحلیل چندتایم‌فریمه عمیق را برای این درخواست ارائه بده: {text}")
+            if ai_response:
+                send_telegram_message(chat_id, ai_response, reply_markup=keyboard)
+            else:
+                send_telegram_message(chat_id, "❌ خطا در پردازش پاسخ.")
+
+    return "ok", 200
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Self-Learning Multi-Timeframe Trading Bot is running!", 200
 
 if __name__ == "__main__":
-    bot_thread = threading.Thread(target=run_bot_loop)
-    bot_thread.daemon = True
-    bot_thread.start()
+    scanner_thread = threading.Thread(target=smart_trader_scanner, daemon=True)
+    scanner_thread.start()
     
-    run_web()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
