@@ -18,7 +18,8 @@ TRADING_JOURNAL = {
     "past_signals": [],
     "lessons_learned": [
         "در سشن‌های کم‌حجم آسیایی، احتمال فیک‌بریک‌اوت در نواحی FVG بالاست؛ تمرکز باید روی سشن لندن و نیویورک باشد.",
-        "حد ضرر باید همواره بر اساس ساختار تکنیکال و پشت اوردر بلاک‌ها یا نقدینگی معتبر قرار گیرد تا از استاپ‌هانتینگ جلوگیری شود."
+        "حد ضرر باید همواره بر اساس ساختار تکنیکال و پشت اوردر بلاک‌ها یا نقدینگی معتبر قرار گیرد تا از استاپ‌هانتینگ جلوگیری شود.",
+        "به هنگام انتشار اخبار مهم فاندامنتال، ربات باید فوراً هشدار دهد و تا تخلیه هیجان خبر از ورود مستقیم جلوگیری کند."
     ]
 }
 
@@ -37,7 +38,7 @@ TOP_COINS = [
 # دیکشنری برای ثبت آخرین زمان ارسال سیگنال به تفکیک هر ارز
 LAST_SIGNAL_TIME = {}
 
-# تابع ارسال پیام به تلگرام
+# تابع ارسال پیام به تلگرام با مدیریت خطا
 def send_telegram_message(chat_id, text, reply_markup=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -62,7 +63,7 @@ def is_optimal_trading_session():
         return True
     return False
 
-# ارتباط با هوش مصنوعی Groq با پرامپت بالانس‌شده و دقیق SMC/ICT
+# ارتباط با هوش مصنوعی Groq با تمرکز اصلی تکنیکال و رصد هوشمند اخبار مهم
 def ask_groq_ai_institutional(prompt_text):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -73,21 +74,19 @@ def ask_groq_ai_institutional(prompt_text):
     lessons_str = "\n".join([f"- {lesson}" for lesson in TRADING_JOURNAL["lessons_learned"]])
     
     system_prompt = (
-        "تو یک الگوریتم تریدینگ نهادی حرفه‌ای و تحلیلگر ارشد بازارهای مالی هستی. "
-        "تخصص مطلق و اصلی تو سبک‌های **ICT (اسمارت مانی)، SMC، پرایس اکشن ال بروکس و اوردر فلو** است. "
-        "تحلیل حجم معاملات و والیوم پروفایل تنها به عنوان یک «فیلتر تکمیلی و تاییدکننده» در کنار ساختار تکنیکال استفاده می‌شود، نه تمرکز اصلی. "
-        "قوانین حیاتی برای تعیین نقاط:\n"
-        "- نقاط ورود (Entry) باید بسیار دقیق، تمیز و بر اساس پولبک به نواحی معتبر (مثل اوردر بلاک، FVG یا بریک‌کراکر) باشند.\n"
-        "- حد ضرر (Stop Loss) باید حتماً پشت ساختار معتبر تکنیکال (پشت اوردر بلاک یا سقف/کف حمایتی/مقاومتی) با فاصله ایمن قرار گیرد تا از استاپ‌هانت جلوگیری شود.\n\n"
+        "تو یک الگوریتم تریدینگ نهادی پیشرفته و تحلیلگر ارشد بازارهای مالی هستی. "
+        "تمرکز اصلی و ۹۰ درصدی تو بر روی **تحلیل تکنیکال عمیق، سبک‌های ICT (اسمارت مانی)، SMC، اوردر فلو و پرایس اکشن ال بروکس** است. "
+        "اما قانون فاندامنتال این است: ربات فقط در زمان‌هایی که **خبر مهمی در بازار منتشر شده یا تاثیرگذار است**، آن را به عنوان یک هشدار ویژه در نظر می‌گیرد تا از تله‌های بازار جلوگیری کند. در حالت عادی تمام تمرکز روی چارت است. "
+        "نکته حیاتی: حد ضرر (Stop Loss) باید با دقت بالا و پشت اوردر بلاک‌های معتبر تعیین شود تا از استاپ‌هانتینگ جلوگیری گردد.\n\n"
         f"📚 **حافظه یادگیری و تجربیات قبلی ربات:**\n{lessons_str}\n\n"
-        "اگر شرایط بازار ایده‌آل و موقعیت ورود مناسبی وجود دارد، خروجی باید یک سیگنال دقیق با این ساختار باشد:\n"
+        "اگر شرایط بازار ایده‌آل و موقعیت ورود مناسبی وجود دارد، خروجی باید یک سیگنال دقیق و ساختاریافته با این جزئیات باشد:\n"
         "1. جهت پوزیشن (Long یا Short)\n"
-        "2. درصد تاییدیه یا موفقیت (مثلا 88%)\n"
-        "3. نقطه ورود اول (Entry 1) و نقطه ورود دوم (در صورت نیاز پله‌ای)\n"
-        "4. حد ضرر (Stop Loss) کاملاً منطقی و ساختاریافته\n"
+        "2. **درصد تاییدیه یا موفقیت (مثلا 89%)**\n"
+        "3. نقطه ورود اول (Entry 1) و نقطه ورود دوم (پله‌ای/DCA)\n"
+        "4. حد ضرر (Stop Loss) کاملاً دقیق و مهندسی‌شده\n"
         "5. سه سطح حد سود (TP1, TP2, TP3)\n"
-        "6. مدیریت معامله: نقطه ریسک‌فری (Risk-Free) و تریلینگ استاپ\n"
-        "7. تحلیل فنی ساختاری (بررسی روند 4H، ساختار 1H، تاییدیه 15M، اوردر بلاک، FVG و وضعیت حجم به عنوان تاییدیه)."
+        "6. مدیریت معامله: نقطه ریسک‌فری (Risk-Free) و تریلینگ استاپ (Trailing Stop)\n"
+        "7. تحلیل فنی نهادی و در صورت وجود خبر مهم، هشدار فاندامنتال کوتاه."
     )
 
     payload = {
@@ -97,7 +96,7 @@ def ask_groq_ai_institutional(prompt_text):
             {"role": "user", "content": prompt_text}
         ],
         "temperature": 0.2,
-        "max_tokens": 1200
+        "max_tokens": 1300
     }
 
     try:
@@ -111,7 +110,7 @@ def ask_groq_ai_institutional(prompt_text):
         print(f"Groq API Exception: {e}")
         return None
 
-# تحلیل چندتایم‌فریمه بازار
+# تحلیل چندتایم‌فریمه بازار با تمرکز اصلی چارت و رصد اخبار مهم
 def analyze_institutional_market(coin):
     try:
         h_4h = TA_Handler(symbol=coin["symbol"], exchange=coin["exchange"], screener="crypto", interval=Interval.INTERVAL_4_HOURS)
@@ -130,11 +129,11 @@ def analyze_institutional_market(coin):
         volume_1h = ind_1h.get("volume", 0)
         
         prompt = (
-            f"ارز {coin['name']} ({coin['symbol']}) داده‌های بازار (TradingView):\n"
+            f"ارز {coin['name']} ({coin['symbol']}) داده‌های معاملاتی (TradingView):\n"
             f"- ساختار ۴ ساعته: {rec_4h}\n"
-            f"- مومنتوم ۱ ساعته (قیمت بسته شدن: {close_price} | حجم: {volume_1h}): {rec_1h}\n"
+            f"- مومنتوم ۱ ساعته (قیمت: {close_price} | حجم: {volume_1h}): {rec_1h}\n"
             f"- تاییدیه ۱۵ دقیقه (RSI: {rsi_15m}): {rec_15m}\n\n"
-            f"لطفاً بر اساس سبک قدرتمند SMC و ICT (با نگاهی به حجم به عنوان تاییدیه)، بررسی کن که آیا موقعیت ورود تمیز و استانداردی وجود دارد؟ در صورت تایید، سیگنال کامل را صادر کن."
+            f"لطفاً با تمرکز اصلی و کامل روی چارت، SMC، ICT و پرایس اکشن بررسی کن آیا موقعیت ورودی وجود دارد؟ (فقط اگر خبر مهم تاثیرگذاری در جریان است به آن اشاره کن). در صورت تایید، سیگنال کامل همراه با درصد موفقیت را صادر کن."
         )
         
         signal_output = ask_groq_ai_institutional(prompt)
@@ -144,9 +143,9 @@ def analyze_institutional_market(coin):
         print(f"Technical Analysis Error for {coin['symbol']}: {e}")
         return None
 
-# اسکنر خودکار هوشمند (هر ۳۰ دقیقه)
+# اسکنر خودکار هوشمند (رصد بازار هر ۳۰ دقیقه)
 def institutional_trader_scanner():
-    print("🏛️ اسکنر لحظه‌ای نهادی (با پرامپت بالانس‌شده SMC/ICT) فعال شد...")
+    print("🏛️ اسکنر لحظه‌ای نهادی (تمرکز روی چارت + رصد اخبار مهم) فعال شد...")
     while True:
         try:
             if is_optimal_trading_session():
@@ -157,7 +156,7 @@ def institutional_trader_scanner():
                     if symbol in LAST_SIGNAL_TIME and (current_time - LAST_SIGNAL_TIME[symbol] < 1800):
                         continue 
                     
-                    print(f"🔍 در حال ارزیابی ساختاری {symbol}...")
+                    print(f"🔍 در حال ارزیابی چارت و رویدادهای {symbol}...")
                     signal = analyze_institutional_market(coin)
                     
                     if signal and ("جهت پوزیشن" in signal or "Long" in signal or "Short" in signal) and "ندارد" not in signal:
@@ -169,7 +168,7 @@ def institutional_trader_scanner():
                             "details": signal[:120]
                         })
                         
-                        full_msg = f"🏛️🚨 **سیگنال نهادی (ساختار SMC / ICT)** 🚨🏛️\n\n{signal}"
+                        full_msg = f"📊📈 **سیگنال نهادی (چارت + رصد اخبار مهم)** 📈📊\n\n{signal}"
                         send_telegram_message(DEFAULT_CHAT_ID, full_msg)
                     
                     time.sleep(15)
@@ -202,8 +201,8 @@ def telegram_webhook():
                 send_telegram_message(chat_id, journal_msg)
                 return "ok", 200
 
-            send_telegram_message(chat_id, f"⏳ در حال تحلیل ساختاری SMC/ICT برای {data}...")
-            ai_response = ask_groq_ai_institutional(f"لطفاً تحلیل کامل نهادی بر پایه SMC، ICT و پرایس اکشن را به همراه نقاط ورود و استاپ لاس دقیق برای ارز {data} ارائه بده.")
+            send_telegram_message(chat_id, f"⏳ در حال تحلیل تخصصی چارت برای {data}...")
+            ai_response = ask_groq_ai_institutional(f"لطفاً تحلیل کامل تکنیکال، درصد موفقیت، نقاط ورود، استاپ لاس ساختاری، ریسک‌فری و تریلینگ استاپ را به همراه بررسی خبر مهم (در صورت وجود) برای ارز {data} ارائه بده.")
             
             if ai_response:
                 send_telegram_message(chat_id, ai_response)
@@ -241,14 +240,14 @@ def telegram_webhook():
 
             if text.startswith("/start") or text.startswith("/help"):
                 welcome_msg = (
-                    "🤖 **سیستم تریدر نهادی هوشمند (تمرکز اصلی روی SMC / ICT)**\n\n"
-                    "سلام! پرامپت ربات اصلاح و بالانس شد تا تحلیل‌ها کاملاً روی ساختار پرایس اکشن، نواحی اوردر بلاک و استاپ‌لاس‌های منطقی متمرکز باشند.\n"
-                    "از منوی زیر برای بررسی دستی ارزها استفاده کنید:"
+                    "🤖 **سیستم تریدر نهادی هوشمند (تمرکز چارت + رصد اخبار مهم)**\n\n"
+                    "سلام! ربات شما آماده است. تمرکز اصلی روی چارت و SMC است و فقط هنگام انتشار اخبار مهم به شما هشدار می‌دهد.\n"
+                    "از منوی زیر برای بررسی ارزها استفاده کنید:"
                 )
                 send_telegram_message(chat_id, welcome_msg, reply_markup=keyboard)
             else:
-                send_telegram_message(chat_id, "⏳ در حال بررسی عمیق ساختاری درخواست شما...")
-                ai_response = ask_groq_ai_institutional(f"لطفاً تحلیل کامل نهادی را برای این درخواست ارائه بده: {text}")
+                send_telegram_message(chat_id, "⏳ در حال بررسی چارت و تحلیل درخواست شما...")
+                ai_response = ask_groq_ai_institutional(f"کاربر این درخواست را مطرح کرده است: '{text}'. لطفاً با تمرکز بر چارت و تکنیکال پاسخ کامل بده.")
                 
                 if ai_response:
                     send_telegram_message(chat_id, ai_response, reply_markup=keyboard)
@@ -263,7 +262,7 @@ def telegram_webhook():
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Institutional Trading Bot with Balanced SMC/ICT Prompt is running!", 200
+    return "Institutional Trading Bot with Chart Focus & News Alert is running!", 200
 
 if __name__ == "__main__":
     scanner_thread = threading.Thread(target=institutional_trader_scanner, daemon=True)
