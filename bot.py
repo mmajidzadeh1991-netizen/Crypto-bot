@@ -1,4 +1,4 @@
-import os
+Import os
 import requests
 import time
 import threading
@@ -23,19 +23,19 @@ TRADING_JOURNAL = {
     ]
 }
 
-# لیست ارزهای پیش‌فرض منو
+# لیست ارزهای پیش‌فرض منو (متصل به موتور TradingView)
 TOP_COINS = [
-    {"symbol": "BTCUSDT", "exchange": "BINANCE", "name": "بیت‌کوین (BTC)", "cg_id": "bitcoin"},
-    {"symbol": "ETHUSDT", "exchange": "BINANCE", "name": "اتریوم (ETH)", "cg_id": "ethereum"},
-    {"symbol": "SOLUSDT", "exchange": "BINANCE", "name": "سولانا (SOL)", "cg_id": "solana"},
-    {"symbol": "XRPUSDT", "exchange": "BINANCE", "name": "ریپل (XRP)", "cg_id": "ripple"},
-    {"symbol": "BNBUSDT", "exchange": "BINANCE", "name": "بایننس کوین (BNB)", "cg_id": "binancecoin"},
-    {"symbol": "ADAUSDT", "exchange": "BINANCE", "name": "کاردانو (ADA)", "cg_id": "cardano"},
-    {"symbol": "AVAXUSDT", "exchange": "BINANCE", "name": "اولانچ (AVAX)", "cg_id": "avalanche-2"},
-    {"symbol": "LINKUSDT", "exchange": "BINANCE", "name": "چین‌لینک (LINK)", "cg_id": "chainlink"}
+    {"symbol": "BTCUSDT", "exchange": "BINANCE", "name": "بیت‌کوین (BTC - TradingView)", "cg_id": "bitcoin"},
+    {"symbol": "ETHUSDT", "exchange": "BINANCE", "name": "اتریوم (ETH - TradingView)", "cg_id": "ethereum"},
+    {"symbol": "SOLUSDT", "exchange": "BINANCE", "name": "سولانا (SOL - TradingView)", "cg_id": "solana"},
+    {"symbol": "XRPUSDT", "exchange": "BINANCE", "name": "ریپل (XRP - TradingView)", "cg_id": "ripple"},
+    {"symbol": "BNBUSDT", "exchange": "BINANCE", "name": "بایننس کوین (BNB - TradingView)", "cg_id": "binancecoin"},
+    {"symbol": "ADAUSDT", "exchange": "BINANCE", "name": "کاردانو (ADA - TradingView)", "cg_id": "cardano"},
+    {"symbol": "AVAXUSDT", "exchange": "BINANCE", "name": "اولانچ (AVAX - TradingView)", "cg_id": "avalanche-2"},
+    {"symbol": "LINKUSDT", "exchange": "BINANCE", "name": "چین‌لینک (LINK - TradingView)", "cg_id": "chainlink"}
 ]
 
-# دیکشنری برای ثبت آخرین زمان ارسال سیگنال به تفکیک هر ارز
+# دیکشنری برای ثبت آخرین زمان ارسال سیگنال به تفکیک هر ارز (تنظیم شده روی ۲ ساعت = ۷۲۰۰ ثانیه)
 LAST_SIGNAL_TIME = {}
 
 # تابع ارسال پیام به تلگرام با مدیریت خطا
@@ -66,7 +66,6 @@ def is_optimal_trading_session():
 # دریافت داده‌های فاندامنتال از CoinGecko
 def fetch_coingecko_data(symbol_clean):
     try:
-        # نگاشت نمادها به شناسه کوین‌گکو
         mapping = {
             "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "XRP": "ripple",
             "BNB": "binancecoin", "ADA": "cardano", "AVAX": "avalanche-2", "LINK": "chainlink",
@@ -105,8 +104,8 @@ def fetch_coinglass_data(symbol_clean):
         print(f"Coinglass Error: {e}")
     return "داده‌های مشتقات و Open Interest کوین‌گلس در حال به‌روزرسانی است."
 
-# ارتباط با هوش مصنوعی Groq با الزام استفاده از قیمت لایو و اطلاعات ترکیبی
-def ask_groq_ai_institutional(prompt_text):
+# ارتباط با هوش مصنوعی Groq با سیستم مدیریت ریسک به ریوارد پویا (قابل انعطاف بین ۱ به ۲، ۱ به ۳ یا بیشتر بر اساس ساختار چارت)
+def ask_groq_ai_institutional(prompt_text, image_url=None):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -116,32 +115,53 @@ def ask_groq_ai_institutional(prompt_text):
     lessons_str = "\n".join([f"- {lesson}" for lesson in TRADING_JOURNAL["lessons_learned"]])
     
     system_prompt = (
-        "تو یک الگوریتم تریدینگ نهادی پیشرفته و تحلیلگر ارشد بازارهای مالی هستی. "
-        "تمرکز اصلی و ۹۰ درصدی تو بر روی **تحلیل تکنیکال عمیق، سبک‌های ICT (اسمارت مانی)، SMC، اوردر فلو، پرایس اکشن ال بروکس، به همراه بررسی داده‌های فاندامنتال (CoinGecko) و مشتقات بازار/تجمع پوزیشن‌ها (Coinglass)** است. "
-        "قانون حیاتی: حتماً از **قیمت لایو و دقیق بازار** و داده‌های تکمیلی که به تو داده می‌شود استفاده کن و نقاط ورود (Entry)، حد ضرر (SL) و حد سودها (TP) را منحصراً بر اساس همین قیمت واقعی محاسبه و اعلام کن.\n\n"
+        "تو یک الگوریتم تریدینگ نهادی پیشرفته و تحلیلگر ارشد با قابلیت بینایی (Vision) هستی. "
+        "استراتژی اصلی تو مبتنی بر ICT، SMC (شناسایی دقیق اوردر بلاک Order Block، لیکوییدیتی سویپ Liquidity Sweep و نواحی FVG)، اوردر فلو و پرایس اکشن ال بروکس است. "
+        "📌 **قانون مدیریت ریسک به ریوارد پویا و هوشمند:** "
+        "نباید کورکورانه روی یک عدد ثابت بمانی. بر اساس نقاط کلیدی معتبر در چارت (نواحی بازگشتی، حمایت/مقاومت‌ها و استخرهای نقدینگی): "
+        "1. اگر ساختار چارت اجازه دهد، **حداقل ریسک به ریوارد ایده‌آل ۱ به ۳** را در نظر بگیر. "
+        "2. اگر به خاطر موانع تکنیکال، فضای حرکتی کمی محدودتر باشد اما ساختار معامله کاملاً امن باشد، می‌توانی **ریسک به ریوارد معقول ۱ به ۲** را پیشنهاد دهی و دلیل آن را توضیح دهی. "
+        "3. اگر پتانسیل حرکتی بسیار بالایی دیدی (مثلاً تا نقدینگی‌های مهم بعدی فاصله زیادی هست)، می‌توانی ریسک به ریواردهای بالاتر (مثل ۱ به ۴ یا بیشتر) را پیشنهاد بدهی و در این خصوص توضیح کامل بدهی. "
+        "اگر تصویر چارت داده شد، نواحی کلیدی، اوردر بلاک‌ها و FVG را روی عکس بررسی کن و بر همان اساس بهترین و منطقی‌ترین ریسک به ریوارد را انتخاب کن.\n\n"
         f"📚 **حافظه یادگیری و تجربیات قبلی ربات:**\n{lessons_str}\n\n"
-        "اگر شرایط بازار ایده‌آل و موقعیت ورود مناسبی وجود دارد، خروجی باید یک سیگنال دقیق و ساختاریافته با این جزئیات باشد:\n"
+        "ساختار سیگنال خروجی:\n"
         "1. جهت پوزیشن (Long یا Short)\n"
-        "2. **درصد تاییدیه یا موفقیت (مثلا 89%)**\n"
-        "3. نقطه ورود اول (Entry 1) و نقطه ورود دوم (پله‌ای/DCA)\n"
-        "4. حد ضرر (Stop Loss) کاملاً دقیق و مهندسی‌شده بر اساس قیمت لایو\n"
-        "5. سه سطح حد سود (TP1, TP2, TP3)\n"
-        "6. مدیریت معامله: نقطه ریسک‌فری (Risk-Free) و تریلینگ استاپ (Trailing Stop)\n"
-        "7. تحلیل فنی نهادی، ارزیابی وضعیت Open Interest و در صورت وجود خبر مهم، هشدار فاندامنتال کوتاه."
+        "2. درصد تاییدیه یا موفقیت\n"
+        "3. نقطه ورود (Entry)\n"
+        "4. حد ضرر (Stop Loss) مهندسی‌شده پشت اوردر بلاک یا سویپ\n"
+        "5. سطوح حد سود (TPها) با ذکر دقیق نسبت ریسک به ریوارد انتخاب‌شده (۱ به ۲ یا ۱ به ۳ یا بیشتر)\n"
+        "6. توضیح تحلیلی درباره اینکه چرا این ریسک به ریوارد بر اساس نقاط کلیدی چارت انتخاب شده است\n"
+        "7. دستورالعمل مدیریت معامله (ریسک‌فری پس از تاچ شدن TP1)"
     )
 
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
+    if image_url:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt_text},
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                ]
+            }
+        ]
+        model_name = "llama-3.2-11b-vision-preview"
+    else:
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt_text}
-        ],
+        ]
+        model_name = "llama-3.3-70b-versatile"
+
+    payload = {
+        "model": model_name,
+        "messages": messages,
         "temperature": 0.2,
         "max_tokens": 1400
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=25)
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
         res_data = response.json()
         if "choices" in res_data:
             return res_data["choices"][0]["message"]["content"]
@@ -151,8 +171,8 @@ def ask_groq_ai_institutional(prompt_text):
         print(f"Groq API Exception: {e}")
         return None
 
-# تحلیل جامع و چندمنظوره بازار (TradingView + CoinGecko + Coinglass)
-def analyze_custom_market(raw_symbol):
+# تحلیل جامع و چندمنظوره بازار
+def analyze_custom_market(raw_symbol, image_url=None):
     try:
         symbol = raw_symbol.upper().strip()
         if not symbol.endswith("USDT") and not symbol.endswith("USD"):
@@ -160,7 +180,6 @@ def analyze_custom_market(raw_symbol):
             
         symbol_clean = symbol.replace("USDT", "").replace("USD", "")
             
-        # 1. استعلام از TradingView
         h_4h = TA_Handler(symbol=symbol, exchange="BINANCE", screener="crypto", interval=Interval.INTERVAL_4_HOURS)
         rec_4h = h_4h.get_analysis().summary.get("RECOMMENDATION", "NEUTRAL")
         
@@ -176,33 +195,26 @@ def analyze_custom_market(raw_symbol):
         rsi_15m = ind_15m.get("RSI", 0)
         volume_1h = ind_1h.get("volume", 0)
 
-        # 2. استعلام از CoinGecko
         cg_info = fetch_coingecko_data(symbol_clean)
-
-        # 3. استعلام از Coinglass
         cg_glass = fetch_coinglass_data(symbol_clean)
         
         prompt = (
-            f"ارز مورد نظر ({symbol}) داده‌های ترکیبی زنده پلتفرم‌ها:\n"
-            f"- **قیمت لحظه‌ای و دقیق بازار (TradingView Live Close): {close_price}**\n"
-            f"- ساختار ۴ ساعته: {rec_4h}\n"
-            f"- مومنتوم ۱ ساعته (حجم: {volume_1h}): {rec_1h}\n"
-            f"- تاییدیه ۱۵ دقیقه (RSI: {rsi_15m}): {rec_15m}\n"
-            f"- داده‌های فاندامنتال (CoinGecko): {cg_info}\n"
-            f"- داده‌های مشتقات و تجمع پوزیشن‌ها (Coinglass): {cg_glass}\n\n"
-            f"با توجه به قیمت لایو بازار `{close_price}` و داده‌های جامع بالا، با تمرکز کامل روی چارت، SMC، ICT، اوردر فلو و وضعیت فیوچرز بررسی کن آیا موقعیت ورودی وجود دارد؟ مقادیر ورود و حد سود و ضرر را بر اساس همین قیمت دقیق محاسبه کن."
+            f"ارز مورد نظر ({symbol}) قیمت لایو: {close_price}\n"
+            f"- ساختار ۴ساعته: {rec_4h} | مومنتوم ۱ساعته: {rec_1h} | RSI 15م: {rsi_15m}\n"
+            f"- فاندامنتال: {cg_info} | مشتقات: {cg_glass}\n\n"
+            "لطفاً با بررسی نقاط کلیدی چارت و اوردر بلاک‌ها، بهترین و منطقی‌ترین ریسک به ریوارد (معمولاً ۱ به ۳ یا ۱ به ۲، یا مقادیر بالاتر در صورت وجود پتانسیل) را انتخاب کرده و تحلیل و سیگنال کامل را صادر کن."
         )
         
-        signal_output = ask_groq_ai_institutional(prompt)
-        return signal_output, symbol
+        signal_output = ask_groq_ai_institutional(prompt, image_url=image_url)
+        return signal_output, symbol, close_price
         
     except Exception as e:
         print(f"Technical Analysis Error for {raw_symbol}: {e}")
-        return None, None
+        return None, None, 0
 
-# اسکنر خودکار هوشمند (رصد بازار هر ۳۰ دقیقه)
+# اسکنر خودکار هوشمند
 def institutional_trader_scanner():
-    print("🏛️ اسکنر لحظه‌ای نهادی (TradingView + CoinGecko + Coinglass) فعال شد...")
+    print("🏛️ اسکنر لحظه‌ای نهادی فعال شد...")
     while True:
         try:
             if is_optimal_trading_session():
@@ -210,11 +222,10 @@ def institutional_trader_scanner():
                     symbol = coin["symbol"]
                     current_time = time.time()
                     
-                    if symbol in LAST_SIGNAL_TIME and (current_time - LAST_SIGNAL_TIME[symbol] < 1800):
+                    if symbol in LAST_SIGNAL_TIME and (current_time - LAST_SIGNAL_TIME[symbol] < 7200):
                         continue 
                     
-                    print(f"🔍 در حال ارزیابی جامع چارت و داده‌های {symbol}...")
-                    signal, _ = analyze_custom_market(symbol)
+                    signal, _, current_p = analyze_custom_market(symbol)
                     
                     if signal and ("جهت پوزیشن" in signal or "Long" in signal or "Short" in signal) and "ندارد" not in signal:
                         LAST_SIGNAL_TIME[symbol] = current_time
@@ -222,23 +233,27 @@ def institutional_trader_scanner():
                         TRADING_JOURNAL["past_signals"].append({
                             "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
                             "symbol": symbol,
-                            "details": signal[:120]
+                            "details": signal[:120],
+                            "entry_price": current_p
                         })
                         
-                        full_msg = f"📊📈 **سیگنال نهادی پیشرفته ({symbol})** 📈📊\n\n{signal}"
+                        vision_request_note = (
+                            "\n\n💬 **بازبینی بصری:**\n"
+                            f"اگر مایل هستید، اسکرین‌شات چارت `{symbol}` را بفرستید تا ربات با بررسی نقاط کلیدی، بهترین ریسک به ریوارد (۱ به ۲، ۱ به ۳ یا بیشتر) را روی عکس تنظیم و تحلیل کند."
+                        )
+                        
+                        full_msg = f"📊📈 **سیگنال نهادی پیشرفته (ریسک به ریوارد پویا - {symbol})** 📈📊\n\n{signal}{vision_request_note}"
                         send_telegram_message(DEFAULT_CHAT_ID, full_msg)
                     
                     time.sleep(15)
-                    
             else:
                 print("⏳ خارج از سشن‌های اصلی؛ رصد ملایم بازار...")
-                
         except Exception as e:
             print(f"Scanner Loop Error: {e}")
             
         time.sleep(1800)
 
-# مدیریت وب‌هوک و دریافت پیام‌ها از تلگرام
+# مدیریت وب‌هوک و دریافت پیام‌ها و عکس‌ها از تلگرام
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = request.get_json()
@@ -258,36 +273,41 @@ def telegram_webhook():
                 send_telegram_message(chat_id, journal_msg)
                 return "ok", 200
 
-            send_telegram_message(chat_id, f"⏳ در حال استعلام قیمت لایو، داده‌های کوین‌گکو، کوین‌گلس و تحلیل تخصصی `{data}`...")
-            ai_response, _ = analyze_custom_market(data)
+            send_telegram_message(chat_id, f"⏳ در حال استعلام قیمت لایو از TradingView و تحلیل تخصصی `{data}`...")
+            ai_response, _, _ = analyze_custom_market(data)
             
             if ai_response:
-                send_telegram_message(chat_id, ai_response)
+                vision_request_note = (
+                    "\n\n💬 **بازبینی بصری:**\n"
+                    f"اگر مایل هستید، اسکرین‌شات چارت `{data}` را بفرستید تا ربات با بررسی نقاط کلیدی، بهترین ریسک به ریوارد (۱ به ۲، ۱ به ۳ یا بیشتر) را روی عکس تنظیم و تحلیل کند."
+                )
+                send_telegram_message(chat_id, ai_response + vision_request_note)
             else:
                 send_telegram_message(chat_id, f"⚪ خطا در دریافت داده‌های بازار برای نماد `{data}`.")
             return "ok", 200
 
         if "message" in update:
             chat_id = update["message"]["chat"]["id"]
-            text = update["message"].get("text", "").strip()
+            message = update["message"]
+            text = message.get("text", message.get("caption", "")).strip()
 
             keyboard = {
                 "inline_keyboard": [
                     [
-                        {"text": "🪙 بیت‌کوین (BTC)", "callback_data": "BTCUSDT"},
-                        {"text": "Ξ اتریوم (ETH)", "callback_data": "ETHUSDT"}
+                        {"text": "🪙 بیت‌کوین (BTC - TradingView)", "callback_data": "BTCUSDT"},
+                        {"text": "Ξ اتریوم (ETH - TradingView)", "callback_data": "ETHUSDT"}
                     ],
                     [
-                        {"text": "⚡ سولانا (SOL)", "callback_data": "SOLUSDT"},
-                        {"text": "💎 ریپل (XRP)", "callback_data": "XRPUSDT"}
+                        {"text": "⚡ سولانا (SOL - TradingView)", "callback_data": "SOLUSDT"},
+                        {"text": "💎 ریپل (XRP - TradingView)", "callback_data": "XRPUSDT"}
                     ],
                     [
-                        {"text": "🟢 بایننس کوین (BNB)", "callback_data": "BNBUSDT"},
-                        {"text": "🟣 کاردانو (ADA)", "callback_data": "ADAUSDT"}
+                        {"text": "🟢 بایننس کوین (BNB - TradingView)", "callback_data": "BNBUSDT"},
+                        {"text": "🟣 کاردانو (ADA - TradingView)", "callback_data": "ADAUSDT"}
                     ],
                     [
-                        {"text": "🔺 اولانچ (AVAX)", "callback_data": "AVAXUSDT"},
-                        {"text": "🔗 چین‌لینک (LINK)", "callback_data": "LINKUSDT"}
+                        {"text": "🔺 اولانچ (AVAX - TradingView)", "callback_data": "AVAXUSDT"},
+                        {"text": "🔗 چین‌لینک (LINK - TradingView)", "callback_data": "LINKUSDT"}
                     ],
                     [
                         {"text": "📖 ژورنال و وضعیت یادگیری هوش مصنوعی", "callback_data": "JOURNAL_STATS"}
@@ -295,31 +315,60 @@ def telegram_webhook():
                 ]
             }
 
+            # چشم هوش مصنوعی برای دریافت عکس و تحلیل هوشمند ریسک به ریوارد بر اساس ساختار چارت
+            if "photo" in message:
+                send_telegram_message(chat_id, "👁️ **چشم هوشمند فعال شد!** در حال اسکن تصویر چارت، یافتن نواحی بازگشتی و تعیین بهترین ریسک به ریوارد (۱ به ۲، ۱ به ۳ یا بیشتر)...")
+                
+                photo_file_id = message["photo"][-1]["file_id"]
+                file_info_res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={photo_file_id}")
+                file_path = file_info_res.json().get("result", {}).get("file_path")
+                
+                if file_path:
+                    image_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+                    
+                    target_symbol = text.upper() if text else "BTCUSDT"
+                    if not target_symbol.endswith("USDT") and not target_symbol.endswith("USD"):
+                        target_symbol += "USDT"
+                        
+                    ai_response, verified_symbol, _ = analyze_custom_market(target_symbol, image_url=image_url)
+                    
+                    if ai_response:
+                        send_telegram_message(chat_id, f"📊 **تحلیل پویا و بازبینی چارت برای: {verified_symbol}**\n\n{ai_response}", reply_markup=keyboard)
+                    else:
+                        send_telegram_message(chat_id, "❌ خطا در تحلیل تصویر چارت.", reply_markup=keyboard)
+                else:
+                    send_telegram_message(chat_id, "❌ نتوانستم فایل عکس را دریافت کنم.", reply_markup=keyboard)
+                
+                return "ok", 200
+
             if text.startswith("/start") or text.startswith("/help"):
                 welcome_msg = (
-                    "🤖 **سیستم تریدر نهادی پیشرفته (متصل به TradingView + CoinGecko + Coinglass)**\n\n"
-                    "سلام! ربات هم‌زمان به تکنیکال تریدینگ‌ویو، داده‌های فاندامنتال کوین‌گکو و وضعیت مشتقات کوین‌گلس متصل است.\n"
-                    "می‌توانید از دکمه‌های زیر استفاده کنید یا **نام هر ارز دلخواهی** (مثل `doge` یا `near`) را ارسال کنید."
+                    "🤖 **سیستم تریدر نهادی پیشرفته (مدیریت ریسک به ریوارد پویا)**\n\n"
+                    "سلام! ربات با قابلیت انتخاب هوشمند ریسک به ریوارد (۱ به ۲، ۱ به ۳ یا بالاتر بسته به نقاط کلیدی چارت) آماده است.\n"
+                    "می‌توانید از منو استفاده کنید، نام ارز را بفرستید یا اسکرین‌شات چارت خود را ارسال کنید تا ربات تصویر را با استراتژی کامل بررسی کند."
                 )
                 send_telegram_message(chat_id, welcome_msg, reply_markup=keyboard)
             else:
-                send_telegram_message(chat_id, f"⏳ در حال استعلام لایو از ۳ منبع و تحلیل تخصصی برای `{text}`...")
-                ai_response, verified_symbol = analyze_custom_market(text)
+                send_telegram_message(chat_id, f"⏳ در حال بررسی لایو و استخراج سیگنال پویا برای `{text}`...")
+                ai_response, verified_symbol, _ = analyze_custom_market(text)
                 
                 if ai_response:
-                    send_telegram_message(chat_id, f"📊 **نتیجه تحلیل ترکیبی برای: {verified_symbol}**\n\n{ai_response}", reply_markup=keyboard)
+                    vision_request_note = (
+                        "\n\n💬 **بازبینی بصری:**\n"
+                        f"اگر مایل هستید، اسکرین‌شات چارت `{verified_symbol}` را بفرستید تا ربات با بررسی نقاط کلیدی، بهترین ریسک به ریوارد (۱ به ۲، ۱ به ۳ یا بیشتر) را روی عکس تنظیم و تحلیل کند."
+                    )
+                    send_telegram_message(chat_id, f"📊 **نتیجه تحلیل ترکیبی برای: {verified_symbol}**\n\n{ai_response}{vision_request_note}", reply_markup=keyboard)
                 else:
-                    send_telegram_message(chat_id, f"❌ نماد `{text}` یافت نشد یا در دریافت اطلاعات خطا رخ داد. لطفاً نماد صحیح را وارد کنید (مثلا: doge).", reply_markup=keyboard)
+                    send_telegram_message(chat_id, f"❌ نماد `{text}` یافت نشد. لطفاً نماد صحیح را وارد کنید.", reply_markup=keyboard)
 
     except Exception as e:
-        error_msg = f"❌ خطای سیستمی در پردازش: {str(e)}"
-        print(error_msg)
+        print(f"Error: {e}")
 
     return "ok", 200
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Multi-Source Institutional Trading Bot (TradingView + CoinGecko + Coinglass) is running!", 200
+    return "Dynamic Risk-Reward Institutional Trading Bot is running!", 200
 
 if __name__ == "__main__":
     scanner_thread = threading.Thread(target=institutional_trader_scanner, daemon=True)
